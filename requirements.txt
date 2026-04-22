@@ -1,2 +1,1 @@
-pyTelegramBotAPI
-pytz
+aiogram==3.7.0
