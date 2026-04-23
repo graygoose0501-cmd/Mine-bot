@@ -64,29 +64,26 @@ class MinesweeperGame:
                 )
 
     def open_cell(self, r, c):
+        """Открывает только одну клетку (без авто-открытия соседних)"""
         if self.revealed[r][c] or self.game_over:
             return 0
+        
         self.revealed[r][c] = True
-        self.revealed_count += 1
+        
         if self.board[r][c] == -1:
             self.game_over = True
-            return 0  # проигрыш, прибыль 0
-        if self.board[r][c] == 0:
-            for dr in (-1,0,1):
-                for dc in (-1,0,1):
-                    nr, nc = r+dr, c+dc
-                    if 0 <= nr < self.rows and 0 <= nc < self.cols:
-                        self.open_cell(nr, nc)
+            return 0  # проигрыш
+        
+        self.revealed_count += 1
         self._check_win()
-        # Возвращаем прибыль за открытую ячейку
+        
         return self._calculate_profit()
 
     def _calculate_profit(self):
         """Расчёт прибыли в зависимости от прогресса"""
-        progress = self.revealed_count / self.safe_cells
-        if progress <= 0:
+        if self.revealed_count == 0:
             return 0
-        # Множитель растёт с прогрессом
+        progress = self.revealed_count / self.safe_cells
         multiplier = 1 + (progress * (self.mines_count / self.safe_cells) * 5)
         return round(self.bet * multiplier, 1)
 
@@ -100,7 +97,7 @@ class MinesweeperGame:
             return "⬜"
         if self.board[r][c] == -1:
             return "💣"
-        return "✅"
+        return "✅"  # все безопасные клетки - одинаковый значок
 
 # ─── Клавиатуры ────────────────────────────────────────────
 
@@ -123,20 +120,14 @@ def mode_select():
 
 def mines_select(rows, cols):
     """Кнопки выбора количества мин"""
-    max_mines = rows * cols - 1  # минимум 1 безопасная клетка
-    mines_options = []
-    
     if rows == 3 and cols == 3:
-        # Для 3x3: 2,3,4,5,6,7,8 мин
         options = [2, 3, 4, 5, 6, 7, 8]
     elif rows == 5 and cols == 5:
-        # Для 5x5: 3,5,7,10,12,15
         options = [3, 5, 7, 10, 12, 15]
     elif rows == 10 and cols == 10:
-        # Для 10x10: 5,10,15,20,25,30
         options = [5, 10, 15, 20, 25, 30]
     
-    # Группируем по 3 кнопки в ряд
+    mines_options = []
     for i in range(0, len(options), 3):
         row = [
             InlineKeyboardButton(
@@ -146,7 +137,6 @@ def mines_select(rows, cols):
         ]
         mines_options.append(row)
     
-    # Добавляем выбор ставки
     mines_options.append([
         InlineKeyboardButton(text="🔙 К режимам", callback_data="back_to_modes")
     ])
@@ -188,14 +178,14 @@ def game_board(game: MinesweeperGame):
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 games: dict[int, MinesweeperGame] = {}
-temp_mode: dict[int, tuple] = {}  # временное хранение rows, cols
-temp_mines: dict[int, int] = {}   # временное хранение выбранных мин
+temp_mode: dict[int, tuple] = {}
+temp_mines: dict[int, int] = {}
 
 @dp.message(CommandStart())
 async def cmd_start(msg: Message):
     player = get_player(msg.from_user.id)
     await msg.answer(
-        f"🎮 Добро пожаловать в Minesweeper!\n"
+        f"🎮 Добро пожаловать в Mines!\n"
         f"💰 Ваш баланс: {player['balance']} ⭐\n"
         f"Выбери игру 👇",
         reply_markup=main_menu()
@@ -302,10 +292,10 @@ async def cash_out(call: CallbackQuery):
     await call.message.edit_text(
         f"💵 Вы забрали выигрыш: +{profit} ⭐\n"
         f"💰 Ваш баланс: {player['balance']} ⭐\n"
-        f"Открыто клеток: {game.revealed_count}/{game.safe_cells}",
+        f"📦 Открыто клеток: {game.revealed_count}/{game.safe_cells}",
         reply_markup=game_board(game)
     )
-    await call.answer(f"✅ +{profit} ⭐", show_alert=True)
+    await call.answer(f"✅ +{profit} ⭐")
 
 @dp.callback_query(F.data == "new_game")
 async def new_game(call: CallbackQuery):
@@ -325,7 +315,6 @@ async def on_cell(call: CallbackQuery):
     player = get_player(call.from_user.id)
     
     if game.win:
-        # Победа - умножаем ставку на 3
         total_win = game.bet * 3
         player["balance"] += total_win
         await call.message.edit_text(
@@ -336,7 +325,7 @@ async def on_cell(call: CallbackQuery):
         )
     elif game.game_over:
         await call.message.edit_text(
-            f"💥 Вы подорвались на мине!\n"
+            f"💥 Вы подорвался на мине!\n"
             f"❌ Потеряно: {game.bet} ⭐\n"
             f"💰 Баланс: {player['balance']} ⭐",
             reply_markup=game_board(game)
