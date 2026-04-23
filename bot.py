@@ -13,7 +13,7 @@ bot = telebot.TeleBot(TOKEN)
 KYIV_TZ = pytz.timezone('Europe/Kiev')
 
 def get_kyiv_time():
-    return datetime.datetime.now(KYIV_TZ)
+    return datetime.now(KYIV_TZ)  # Исправлено: datetime.now() вместо datetime.datetime.now()
 
 def format_kyiv_time(dt=None):
     if dt is None:
@@ -51,7 +51,6 @@ temp_mode = {}
 temp_mines = {}
 waiting_for_custom_deposit = set()
 waiting_for_withdraw_amount = set()
-order_counter = 1
 
 def get_player(user_id):
     if user_id not in players:
@@ -136,31 +135,31 @@ class MinesweeperGame:
 # ─── КЛАВИАТУРЫ ───────────────────────────────────────────
 
 def main_menu():
-    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
     
     # Первый ряд - красный (Мины)
     markup.row(
-        telebot.types.KeyboardButton("Мины", style="danger", icon_custom_emoji_id=MINE_EMOJI_ID)
+        telebot.types.KeyboardButton("💣 Мины", icon_custom_emoji_id=MINE_EMOJI_ID)
     )
     # Второй ряд - зеленый + синий
     markup.row(
-        telebot.types.KeyboardButton("Профиль", style="success", icon_custom_emoji_id=PROFILE_EMOJI_ID),
-        telebot.types.KeyboardButton("Пополнить", style="primary", icon_custom_emoji_id=DEPOSIT_EMOJI_ID)
+        telebot.types.KeyboardButton("👤 Профиль", icon_custom_emoji_id=PROFILE_EMOJI_ID),
+        telebot.types.KeyboardButton("💎 Пополнить", icon_custom_emoji_id=DEPOSIT_EMOJI_ID)
     )
     # Третий ряд - синий + зеленый
     markup.row(
-        telebot.types.KeyboardButton("Вывести", style="primary", icon_custom_emoji_id=WITHDRAW_EMOJI_ID),
-        telebot.types.KeyboardButton("Бонус", style="success", icon_custom_emoji_id=BONUS_EMOJI_ID)
+        telebot.types.KeyboardButton("💸 Вывести", icon_custom_emoji_id=WITHDRAW_EMOJI_ID),
+        telebot.types.KeyboardButton("🎁 Бонус", icon_custom_emoji_id=BONUS_EMOJI_ID)
     )
     # Четвертый ряд - красный (Поддержка)
     markup.row(
-        telebot.types.KeyboardButton("Поддержка", style="danger", icon_custom_emoji_id=SUPPORT_EMOJI_ID)
+        telebot.types.KeyboardButton("📞 Поддержка", icon_custom_emoji_id=SUPPORT_EMOJI_ID)
     )
     return markup
 
 def mode_select():
     markup = telebot.types.InlineKeyboardMarkup()
-    markup.add(
+    markup.row(
         telebot.types.InlineKeyboardButton("3×3", callback_data="mode_3x3"),
         telebot.types.InlineKeyboardButton("5×5", callback_data="mode_5x5"),
         telebot.types.InlineKeyboardButton("10×10", callback_data="mode_10x10"),
@@ -227,41 +226,28 @@ def deposit_menu():
     markup.row(telebot.types.InlineKeyboardButton("✏️ Своя сумма", callback_data="dep_custom"))
     return markup
 
-MENU_BUTTONS = ["Мины", "Профиль", "Пополнить", "Вывести", "Бонус", "Поддержка"]
-
 # ========== START ==========
 
 @bot.message_handler(commands=['start'])
 def start(message):
     user_id = message.chat.id
     player = get_player(user_id)
+    
     bot.send_message(
         user_id,
         f"🎮 Добро пожаловать в Mines!\n"
-        f"💰 Ваш баланс: {player['balance']} ⭐",
+        f"💰 Ваш баланс: {player['balance']} ⭐\n\n"
+        f"Используйте кнопки ниже:",
         reply_markup=main_menu()
     )
 
-# ========== МЕНЮ ==========
+# ========== ОБРАБОТЧИКИ КНОПОК МЕНЮ ==========
 
-@bot.message_handler(func=lambda m: m.text in MENU_BUTTONS)
-def handle_menu(message):
-    t = message.text
-    if t == "Мины":
-        mines_menu(message)
-    elif t == "Профиль":
-        profile(message)
-    elif t == "Пополнить":
-        deposit(message)
-    elif t == "Вывести":
-        withdraw(message)
-    elif t == "Бонус":
-        daily_bonus(message)
-    elif t == "Поддержка":
-        support(message)
+@bot.message_handler(func=lambda m: m.text and "Мины" in m.text)
+def mines_menu(message):
+    bot.send_message(message.chat.id, "🎯 Выберите размер поля:", reply_markup=mode_select())
 
-# ========== ПРОФИЛЬ ==========
-
+@bot.message_handler(func=lambda m: m.text and "Профиль" in m.text)
 def profile(message):
     user_id = message.chat.id
     player = get_player(user_id)
@@ -291,10 +277,56 @@ def profile(message):
         parse_mode="Markdown"
     )
 
-# ========== ПОПОЛНЕНИЕ ==========
-
+@bot.message_handler(func=lambda m: m.text and "Пополнить" in m.text)
 def deposit(message):
     bot.send_message(message.chat.id, "💎 Выберите сумму пополнения:", reply_markup=deposit_menu())
+
+@bot.message_handler(func=lambda m: m.text and "Вывести" in m.text)
+def withdraw(message):
+    waiting_for_withdraw_amount.add(message.chat.id)
+    bot.send_message(
+        message.chat.id,
+        "💸 Введите сумму для вывода (минимум 50 ⭐):\n"
+        "Для отмены напишите 'отмена'"
+    )
+
+@bot.message_handler(func=lambda m: m.text and "Бонус" in m.text)
+def daily_bonus(message):
+    user_id = message.chat.id
+    player = get_player(user_id)
+    now = get_kyiv_time()
+    
+    if player['last_bonus']:
+        if isinstance(player['last_bonus'], str):
+            player['last_bonus'] = datetime.strptime(player['last_bonus'], "%Y-%m-%d %H:%M:%S%z")
+        
+        time_diff = now - player['last_bonus']
+        if time_diff < timedelta(hours=24):
+            remaining = timedelta(hours=24) - time_diff
+            hours, remainder = divmod(remaining.seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            bot.send_message(
+                user_id,
+                f"🎁 Ежедневный бонус уже получен!\n"
+                f"Приходите через: {hours}ч {minutes}м {seconds}с"
+            )
+            return
+    
+    bonus = random.randint(1, 5)
+    player['balance'] += bonus
+    player['last_bonus'] = now.strftime("%Y-%m-%d %H:%M:%S%z")
+    
+    bot.send_message(
+        user_id,
+        f"🎁 Поздравляем! Вы получили {bonus} ⭐!\n"
+        f"💰 Ваш баланс: {player['balance']} ⭐"
+    )
+
+@bot.message_handler(func=lambda m: m.text and "Поддержка" in m.text)
+def support(message):
+    bot.send_message(message.chat.id, "📞 Поддержка пока не доступна")
+
+# ========== ПОПОЛНЕНИЕ ==========
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("dep_"))
 def deposit_callback(call):
@@ -334,7 +366,7 @@ def process_deposit(message, amount):
     
     bot.send_message(user_id, f"✅ Пополнение на {amount} ⭐ успешно!\nКод: {code}")
 
-@bot.message_handler(func=lambda m: m.chat.id in waiting_for_custom_deposit and m.text.isdigit())
+@bot.message_handler(func=lambda m: m.chat.id in waiting_for_custom_deposit and m.text and m.text.isdigit())
 def custom_deposit(message):
     amount = int(message.text)
     if amount < 1:
@@ -346,15 +378,7 @@ def custom_deposit(message):
 
 # ========== ВЫВОД ==========
 
-def withdraw(message):
-    waiting_for_withdraw_amount.add(message.chat.id)
-    bot.send_message(
-        message.chat.id,
-        "💸 Введите сумму для вывода (минимум 50 ⭐):\n"
-        "Для отмены напишите 'отмена'"
-    )
-
-@bot.message_handler(func=lambda m: m.chat.id in waiting_for_withdraw_amount and m.text.isdigit())
+@bot.message_handler(func=lambda m: m.chat.id in waiting_for_withdraw_amount and m.text and m.text.isdigit())
 def withdraw_amount(message):
     amount = int(message.text)
     user_id = message.chat.id
@@ -399,55 +423,12 @@ def withdraw_amount(message):
         f"💰 Остаток баланса: {player['balance']} ⭐"
     )
 
-@bot.message_handler(func=lambda m: m.chat.id in waiting_for_withdraw_amount and m.text.lower() == 'отмена')
+@bot.message_handler(func=lambda m: m.chat.id in waiting_for_withdraw_amount and m.text and m.text.lower() == 'отмена')
 def cancel_withdraw(message):
     waiting_for_withdraw_amount.discard(message.chat.id)
     bot.send_message(message.chat.id, "❌ Вывод отменён")
 
-# ========== БОНУС ==========
-
-def daily_bonus(message):
-    user_id = message.chat.id
-    player = get_player(user_id)
-    now = datetime.datetime.now(KYIV_TZ)
-    
-    if player['last_bonus']:
-        # Конвертируем строку обратно в datetime если нужно
-        if isinstance(player['last_bonus'], str):
-            player['last_bonus'] = datetime.datetime.strptime(player['last_bonus'], "%Y-%m-%d %H:%M:%S")
-            player['last_bonus'] = KYIV_TZ.localize(player['last_bonus'])
-        
-        time_diff = now - player['last_bonus']
-        if time_diff < timedelta(hours=24):
-            remaining = timedelta(hours=24) - time_diff
-            hours, remainder = divmod(remaining.seconds, 3600)
-            minutes, seconds = divmod(remainder, 60)
-            bot.send_message(
-                user_id,
-                f"🎁 Ежедневный бонус уже получен!\n"
-                f"Приходите через: {hours}ч {minutes}м {seconds}с"
-            )
-            return
-    
-    bonus = random.randint(1, 5)
-    player['balance'] += bonus
-    player['last_bonus'] = now
-    
-    bot.send_message(
-        user_id,
-        f"🎁 Поздравляем! Вы получили {bonus} ⭐!\n"
-        f"💰 Ваш баланс: {player['balance']} ⭐"
-    )
-
-# ========== ПОДДЕРЖКА ==========
-
-def support(message):
-    bot.send_message(message.chat.id, "📞 Поддержка пока не доступна")
-
 # ========== ИГРА МИНЫ ==========
-
-def mines_menu(message):
-    bot.send_message(message.chat.id, "🎯 Выберите размер поля:", reply_markup=mode_select())
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("mode_"))
 def select_mode(call):
