@@ -1,11 +1,12 @@
 import telebot
 import os
 import random
-from datetime import datetime, timedelta
+import datetime
 import pytz
+from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
 TOKEN = os.environ.get("BOT_TOKEN")
-BOT_USERNAME = "YourBotUsername"  # замените на юзернейм вашего бота
+BOT_USERNAME = "YourBotUsername"  # ← замени на юзернейм бота без @
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -13,7 +14,7 @@ bot = telebot.TeleBot(TOKEN)
 KYIV_TZ = pytz.timezone('Europe/Kiev')
 
 def get_kyiv_time():
-    return datetime.now(KYIV_TZ)  # Исправлено: datetime.now() вместо datetime.datetime.now()
+    return datetime.datetime.now(KYIV_TZ)
 
 def format_kyiv_time(dt=None):
     if dt is None:
@@ -28,6 +29,15 @@ def format_date_only(dt=None):
 
 ADMINS = [6227572453, 6794644473]
 
+# ===== ХРАНИЛИЩЕ ПОЛЬЗОВАТЕЛЕЙ =====
+user_data = {}
+games = {}
+temp_mode = {}
+temp_mines = {}
+waiting_for_custom_deposit = set()
+waiting_for_withdraw_amount = set()
+
+# ===== НАСТРОЙКИ ИГРЫ =====
 MODES = {
     "3x3": {"rows": 3, "cols": 3},
     "5x5": {"rows": 5, "cols": 5},
@@ -35,6 +45,7 @@ MODES = {
 }
 
 START_BALANCE = 5
+# ==============================
 
 # ID кастомных эмодзи
 MINE_EMOJI_ID = "5375445874988036618"
@@ -44,29 +55,21 @@ WITHDRAW_EMOJI_ID = "5220064167356025824"
 BONUS_EMOJI_ID = "5449800250032143374"
 SUPPORT_EMOJI_ID = "5413623448440160154"
 
-# Хранилище игроков
-players = {}
-games = {}
-temp_mode = {}
-temp_mines = {}
-waiting_for_custom_deposit = set()
-waiting_for_withdraw_amount = set()
-
-def get_player(user_id):
-    if user_id not in players:
-        players[user_id] = {
+def get_user(user_id):
+    if user_id not in user_data:
+        user_data[user_id] = {
+            "reg_date": format_date_only(),
             "balance": START_BALANCE,
             "bet": 1,
             "total_games": 0,
             "mines_games": 0,
-            "reg_date": format_date_only(),
             "last_bonus": None,
             "transactions": [],
         }
-    return players[user_id]
+    return user_data[user_id]
 
-def generate_request_code():
-    return f"#{random.randint(10000, 99999)}"
+def generate_order_number():
+    return random.randint(10000, 99999)
 
 # ─── Логика игры ───────────────────────────────────────────
 
@@ -132,37 +135,36 @@ class MinesweeperGame:
             return "💣"
         return "✅"
 
-# ─── КЛАВИАТУРЫ ───────────────────────────────────────────
-
+# ===== МЕНЮ =====
 def main_menu():
-    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
     
     # Первый ряд - красный (Мины)
     markup.row(
-        telebot.types.KeyboardButton("💣 Мины", icon_custom_emoji_id=MINE_EMOJI_ID)
+        KeyboardButton("Мины", style="danger", icon_custom_emoji_id=MINE_EMOJI_ID)
     )
-    # Второй ряд - зеленый + синий
+    # Второй ряд - зеленый (Профиль) и синий (Пополнить)
     markup.row(
-        telebot.types.KeyboardButton("👤 Профиль", icon_custom_emoji_id=PROFILE_EMOJI_ID),
-        telebot.types.KeyboardButton("💎 Пополнить", icon_custom_emoji_id=DEPOSIT_EMOJI_ID)
+        KeyboardButton("Профиль", style="success", icon_custom_emoji_id=PROFILE_EMOJI_ID),
+        KeyboardButton("Пополнить", style="primary", icon_custom_emoji_id=DEPOSIT_EMOJI_ID)
     )
-    # Третий ряд - синий + зеленый
+    # Третий ряд - синий (Вывести) и зеленый (Бонус)
     markup.row(
-        telebot.types.KeyboardButton("💸 Вывести", icon_custom_emoji_id=WITHDRAW_EMOJI_ID),
-        telebot.types.KeyboardButton("🎁 Бонус", icon_custom_emoji_id=BONUS_EMOJI_ID)
+        KeyboardButton("Вывести", style="primary", icon_custom_emoji_id=WITHDRAW_EMOJI_ID),
+        KeyboardButton("Бонус", style="success", icon_custom_emoji_id=BONUS_EMOJI_ID)
     )
     # Четвертый ряд - красный (Поддержка)
     markup.row(
-        telebot.types.KeyboardButton("📞 Поддержка", icon_custom_emoji_id=SUPPORT_EMOJI_ID)
+        KeyboardButton("Поддержка", style="danger", icon_custom_emoji_id=SUPPORT_EMOJI_ID)
     )
     return markup
 
 def mode_select():
-    markup = telebot.types.InlineKeyboardMarkup()
-    markup.row(
-        telebot.types.InlineKeyboardButton("3×3", callback_data="mode_3x3"),
-        telebot.types.InlineKeyboardButton("5×5", callback_data="mode_5x5"),
-        telebot.types.InlineKeyboardButton("10×10", callback_data="mode_10x10"),
+    markup = InlineKeyboardMarkup()
+    markup.add(
+        InlineKeyboardButton("3×3", callback_data="mode_3x3"),
+        InlineKeyboardButton("5×5", callback_data="mode_5x5"),
+        InlineKeyboardButton("10×10", callback_data="mode_10x10"),
     )
     return markup
 
@@ -174,56 +176,56 @@ def mines_select(rows, cols):
     elif rows == 10 and cols == 10:
         options = [5, 10, 15, 20, 25, 30]
     
-    markup = telebot.types.InlineKeyboardMarkup()
+    markup = InlineKeyboardMarkup()
     for i in range(0, len(options), 3):
         row_buttons = [
-            telebot.types.InlineKeyboardButton(f"💣 {m}", callback_data=f"mines_{m}")
+            InlineKeyboardButton(f"💣 {m}", callback_data=f"mines_{m}")
             for m in options[i:i+3]
         ]
         markup.row(*row_buttons)
     return markup
 
 def bet_select(mines_count):
-    markup = telebot.types.InlineKeyboardMarkup()
+    markup = InlineKeyboardMarkup()
     markup.row(
-        telebot.types.InlineKeyboardButton("⭐ 1", callback_data=f"bet_1_{mines_count}"),
-        telebot.types.InlineKeyboardButton("⭐ 3", callback_data=f"bet_3_{mines_count}"),
-        telebot.types.InlineKeyboardButton("⭐ 5", callback_data=f"bet_5_{mines_count}"),
+        InlineKeyboardButton("⭐ 1", callback_data=f"bet_1_{mines_count}"),
+        InlineKeyboardButton("⭐ 3", callback_data=f"bet_3_{mines_count}"),
+        InlineKeyboardButton("⭐ 5", callback_data=f"bet_5_{mines_count}"),
     )
     markup.row(
-        telebot.types.InlineKeyboardButton("⭐ 10", callback_data=f"bet_10_{mines_count}"),
-        telebot.types.InlineKeyboardButton("⭐ 25", callback_data=f"bet_25_{mines_count}"),
-        telebot.types.InlineKeyboardButton("⭐ 50", callback_data=f"bet_50_{mines_count}"),
+        InlineKeyboardButton("⭐ 10", callback_data=f"bet_10_{mines_count}"),
+        InlineKeyboardButton("⭐ 25", callback_data=f"bet_25_{mines_count}"),
+        InlineKeyboardButton("⭐ 50", callback_data=f"bet_50_{mines_count}"),
     )
     return markup
 
 def game_board(game):
-    markup = telebot.types.InlineKeyboardMarkup()
+    markup = InlineKeyboardMarkup()
     for r in range(game.rows):
         row_buttons = [
-            telebot.types.InlineKeyboardButton(
+            InlineKeyboardButton(
                 text=game.cell_symbol(r, c),
                 callback_data=f"cell_{r}_{c}"
             ) for c in range(game.cols)
         ]
         markup.row(*row_buttons)
-    markup.row(telebot.types.InlineKeyboardButton("🔄 Новая игра", callback_data="new_game"))
-    markup.row(telebot.types.InlineKeyboardButton("💵 Забрать выигрыш", callback_data="cash_out"))
+    markup.row(InlineKeyboardButton("🔄 Новая игра", callback_data="new_game"))
+    markup.row(InlineKeyboardButton("💵 Забрать выигрыш", callback_data="cash_out"))
     return markup
 
 def deposit_menu():
-    markup = telebot.types.InlineKeyboardMarkup()
+    markup = InlineKeyboardMarkup()
     markup.row(
-        telebot.types.InlineKeyboardButton("⭐ 15", callback_data="dep_15"),
-        telebot.types.InlineKeyboardButton("⭐ 30", callback_data="dep_30"),
-        telebot.types.InlineKeyboardButton("⭐ 50", callback_data="dep_50"),
+        InlineKeyboardButton("⭐ 15", callback_data="dep_15"),
+        InlineKeyboardButton("⭐ 30", callback_data="dep_30"),
+        InlineKeyboardButton("⭐ 50", callback_data="dep_50"),
     )
     markup.row(
-        telebot.types.InlineKeyboardButton("⭐ 100", callback_data="dep_100"),
-        telebot.types.InlineKeyboardButton("⭐ 200", callback_data="dep_200"),
-        telebot.types.InlineKeyboardButton("⭐ 500", callback_data="dep_500"),
+        InlineKeyboardButton("⭐ 100", callback_data="dep_100"),
+        InlineKeyboardButton("⭐ 200", callback_data="dep_200"),
+        InlineKeyboardButton("⭐ 500", callback_data="dep_500"),
     )
-    markup.row(telebot.types.InlineKeyboardButton("✏️ Своя сумма", callback_data="dep_custom"))
+    markup.row(InlineKeyboardButton("✏️ Своя сумма", callback_data="dep_custom"))
     return markup
 
 # ========== START ==========
@@ -231,36 +233,36 @@ def deposit_menu():
 @bot.message_handler(commands=['start'])
 def start(message):
     user_id = message.chat.id
-    player = get_player(user_id)
+    ud = get_user(user_id)
     
     bot.send_message(
         user_id,
         f"🎮 Добро пожаловать в Mines!\n"
-        f"💰 Ваш баланс: {player['balance']} ⭐\n\n"
-        f"Используйте кнопки ниже:",
+        f"💰 Ваш баланс: {ud['balance']} ⭐\n\n"
+        f"Выберите действие:",
         reply_markup=main_menu()
     )
 
-# ========== ОБРАБОТЧИКИ КНОПОК МЕНЮ ==========
+# ========== ОБРАБОТЧИКИ МЕНЮ ==========
 
-@bot.message_handler(func=lambda m: m.text and "Мины" in m.text)
+@bot.message_handler(func=lambda m: m.text == "Мины")
 def mines_menu(message):
     bot.send_message(message.chat.id, "🎯 Выберите размер поля:", reply_markup=mode_select())
 
-@bot.message_handler(func=lambda m: m.text and "Профиль" in m.text)
+@bot.message_handler(func=lambda m: m.text == "Профиль")
 def profile(message):
     user_id = message.chat.id
-    player = get_player(user_id)
+    ud = get_user(user_id)
     user = message.from_user
     
     dep_text = "Нет операций"
     wit_text = "Нет операций"
     
-    deposits = [t for t in player['transactions'] if t['type'] == 'deposit']
+    deposits = [t for t in ud['transactions'] if t['type'] == 'deposit']
     if deposits:
         dep_text = "\n".join([f"{t['date']} | {t['amount']} ⭐ | {t['code']}" for t in deposits[-5:]])
     
-    withdraws = [t for t in player['transactions'] if t['type'] == 'withdraw']
+    withdraws = [t for t in ud['transactions'] if t['type'] == 'withdraw']
     if withdraws:
         wit_text = "\n".join([f"{t['date']} | {t['amount']} ⭐ | {t['code']}" for t in withdraws[-5:]])
     
@@ -268,41 +270,46 @@ def profile(message):
         user_id,
         f"👤 *Профиль игрока*\n\n"
         f"🆔 ID: `{user.id}`\n"
-        f"📅 Дата регистрации: {player['reg_date']}\n"
-        f"💰 Баланс: {player['balance']} ⭐\n"
-        f"🎮 Всего игр: {player['total_games']}\n"
-        f"💣 Игр в мины: {player['mines_games']}\n\n"
+        f"📅 Дата регистрации: {ud['reg_date']}\n"
+        f"💰 Баланс: {ud['balance']} ⭐\n"
+        f"🎮 Всего игр: {ud['total_games']}\n"
+        f"💣 Игр в мины: {ud['mines_games']}\n\n"
         f"📥 *Пополнения:*\n{dep_text}\n\n"
         f"📤 *Выводы:*\n{wit_text}",
         parse_mode="Markdown"
     )
 
-@bot.message_handler(func=lambda m: m.text and "Пополнить" in m.text)
+@bot.message_handler(func=lambda m: m.text == "Пополнить")
 def deposit(message):
     bot.send_message(message.chat.id, "💎 Выберите сумму пополнения:", reply_markup=deposit_menu())
 
-@bot.message_handler(func=lambda m: m.text and "Вывести" in m.text)
+@bot.message_handler(func=lambda m: m.text == "Вывести")
 def withdraw(message):
     waiting_for_withdraw_amount.add(message.chat.id)
     bot.send_message(
         message.chat.id,
         "💸 Введите сумму для вывода (минимум 50 ⭐):\n"
-        "Для отмены напишите 'отмена'"
+        "Для отмены напишите 'отмена'",
+        reply_markup=main_menu()
     )
 
-@bot.message_handler(func=lambda m: m.text and "Бонус" in m.text)
+@bot.message_handler(func=lambda m: m.text == "Бонус")
 def daily_bonus(message):
     user_id = message.chat.id
-    player = get_player(user_id)
+    ud = get_user(user_id)
     now = get_kyiv_time()
     
-    if player['last_bonus']:
-        if isinstance(player['last_bonus'], str):
-            player['last_bonus'] = datetime.strptime(player['last_bonus'], "%Y-%m-%d %H:%M:%S%z")
+    if ud['last_bonus']:
+        if isinstance(ud['last_bonus'], str):
+            try:
+                ud['last_bonus'] = datetime.datetime.strptime(ud['last_bonus'], "%Y-%m-%d %H:%M:%S%z")
+            except:
+                ud['last_bonus'] = datetime.datetime.strptime(ud['last_bonus'], "%Y-%m-%d %H:%M:%S")
+                ud['last_bonus'] = KYIV_TZ.localize(ud['last_bonus'])
         
-        time_diff = now - player['last_bonus']
-        if time_diff < timedelta(hours=24):
-            remaining = timedelta(hours=24) - time_diff
+        time_diff = now - ud['last_bonus']
+        if time_diff < datetime.timedelta(hours=24):
+            remaining = datetime.timedelta(hours=24) - time_diff
             hours, remainder = divmod(remaining.seconds, 3600)
             minutes, seconds = divmod(remainder, 60)
             bot.send_message(
@@ -313,16 +320,16 @@ def daily_bonus(message):
             return
     
     bonus = random.randint(1, 5)
-    player['balance'] += bonus
-    player['last_bonus'] = now.strftime("%Y-%m-%d %H:%M:%S%z")
+    ud['balance'] += bonus
+    ud['last_bonus'] = now.strftime("%Y-%m-%d %H:%M:%S%z")
     
     bot.send_message(
         user_id,
         f"🎁 Поздравляем! Вы получили {bonus} ⭐!\n"
-        f"💰 Ваш баланс: {player['balance']} ⭐"
+        f"💰 Ваш баланс: {ud['balance']} ⭐"
     )
 
-@bot.message_handler(func=lambda m: m.text and "Поддержка" in m.text)
+@bot.message_handler(func=lambda m: m.text == "Поддержка")
 def support(message):
     bot.send_message(message.chat.id, "📞 Поддержка пока не доступна")
 
@@ -340,10 +347,10 @@ def deposit_callback(call):
 
 def process_deposit(message, amount):
     user_id = message.chat.id
-    code = generate_request_code()
-    player = get_player(user_id)
-    player['balance'] += amount
-    player['transactions'].append({
+    code = f"#{random.randint(10000, 99999)}"
+    ud = get_user(user_id)
+    ud['balance'] += amount
+    ud['transactions'].append({
         'type': 'deposit',
         'amount': amount,
         'date': format_kyiv_time(),
@@ -382,19 +389,19 @@ def custom_deposit(message):
 def withdraw_amount(message):
     amount = int(message.text)
     user_id = message.chat.id
-    player = get_player(user_id)
+    ud = get_user(user_id)
     
     if amount < 50:
         bot.send_message(user_id, "❌ Минимальная сумма вывода: 50 ⭐")
         return
     
-    if player['balance'] < amount:
-        bot.send_message(user_id, f"❌ Недостаточно звёзд! Ваш баланс: {player['balance']} ⭐")
+    if ud['balance'] < amount:
+        bot.send_message(user_id, f"❌ Недостаточно звёзд! Ваш баланс: {ud['balance']} ⭐")
         return
     
-    code = generate_request_code()
-    player['balance'] -= amount
-    player['transactions'].append({
+    code = f"#{random.randint(10000, 99999)}"
+    ud['balance'] -= amount
+    ud['transactions'].append({
         'type': 'withdraw',
         'amount': amount,
         'date': format_kyiv_time(),
@@ -420,7 +427,7 @@ def withdraw_amount(message):
         user_id,
         f"✅ Заявка на вывод {amount} ⭐ создана!\n"
         f"🔑 Код заявки: {code}\n"
-        f"💰 Остаток баланса: {player['balance']} ⭐"
+        f"💰 Остаток баланса: {ud['balance']} ⭐"
     )
 
 @bot.message_handler(func=lambda m: m.chat.id in waiting_for_withdraw_amount and m.text and m.text.lower() == 'отмена')
@@ -460,10 +467,10 @@ def start_game(call):
     mines = int(mines)
     user_id = call.message.chat.id
     
-    player = get_player(user_id)
+    ud = get_user(user_id)
     
-    if player["balance"] < bet:
-        bot.answer_callback_query(call.id, f"❌ Недостаточно звёзд! Ваш баланс: {player['balance']} ⭐", show_alert=True)
+    if ud["balance"] < bet:
+        bot.answer_callback_query(call.id, f"❌ Недостаточно звёзд! Ваш баланс: {ud['balance']} ⭐", show_alert=True)
         return
     
     if user_id not in temp_mode:
@@ -471,10 +478,10 @@ def start_game(call):
         return
     
     rows, cols = temp_mode[user_id]
-    player["balance"] -= bet
-    player["bet"] = bet
-    player["total_games"] += 1
-    player["mines_games"] += 1
+    ud["balance"] -= bet
+    ud["bet"] = bet
+    ud["total_games"] += 1
+    ud["mines_games"] += 1
     
     games[user_id] = MinesweeperGame(rows, cols, mines, bet)
     
@@ -483,7 +490,7 @@ def start_game(call):
         f"📏 Поле: {rows}×{cols}\n"
         f"💣 Мин: {mines}\n"
         f"💰 Ставка: {bet} ⭐\n"
-        f"💵 Баланс: {player['balance']} ⭐\n\n"
+        f"💵 Баланс: {ud['balance']} ⭐\n\n"
         f"Нажимай на клетки!",
         user_id, call.message.message_id,
         reply_markup=game_board(games[user_id])
@@ -503,13 +510,13 @@ def cash_out(call):
         return
     
     profit = game._calculate_profit()
-    player = get_player(user_id)
-    player["balance"] += profit
+    ud = get_user(user_id)
+    ud["balance"] += profit
     game.game_over = True
     
     bot.edit_message_text(
         f"💵 Вы забрали выигрыш: +{profit} ⭐\n"
-        f"💰 Ваш баланс: {player['balance']} ⭐\n"
+        f"💰 Ваш баланс: {ud['balance']} ⭐\n"
         f"📦 Открыто клеток: {game.revealed_count}/{game.safe_cells}",
         user_id, call.message.message_id,
         reply_markup=game_board(game)
@@ -538,15 +545,15 @@ def on_cell(call):
     
     _, r, c = call.data.split("_")
     profit = game.open_cell(int(r), int(c))
-    player = get_player(user_id)
+    ud = get_user(user_id)
     
     if game.win:
         total_win = game.bet * 3
-        player["balance"] += total_win
+        ud["balance"] += total_win
         bot.edit_message_text(
             f"🎉 Победа! Вы открыли все безопасные клетки!\n"
             f"💰 Выигрыш: +{total_win} ⭐\n"
-            f"💰 Баланс: {player['balance']} ⭐",
+            f"💰 Баланс: {ud['balance']} ⭐",
             user_id, call.message.message_id,
             reply_markup=game_board(game)
         )
@@ -554,7 +561,7 @@ def on_cell(call):
         bot.edit_message_text(
             f"💥 Вы подорвался на мине!\n"
             f"❌ Потеряно: {game.bet} ⭐\n"
-            f"💰 Баланс: {player['balance']} ⭐",
+            f"💰 Баланс: {ud['balance']} ⭐",
             user_id, call.message.message_id,
             reply_markup=game_board(game)
         )
@@ -572,5 +579,5 @@ def on_cell(call):
 # ========== ЗАПУСК ==========
 
 if __name__ == "__main__":
-    print("Бот запущен!")
+    print("✅ Бот запущен!")
     bot.infinity_polling()
