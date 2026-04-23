@@ -17,6 +17,15 @@ MODES = {
     "10x10": {"rows": 10, "cols": 10, "mines": 15},
 }
 
+# ID эмодзи
+SAFE_CELL_EMOJI_ID = "5206607081334906820"  # эмодзи для правильной ячейки
+MINE_EMOJI_ID = "5375445874988036618"       # эмодзи для мины
+
+def get_emoji(emoji_id: str) -> str:
+    """Возвращает строку с custom emoji по ID для использования в тексте кнопки."""
+    # Для Premium эмодзи в тексте кнопки используем формат <emoji id="...">
+    return f'<emoji id="{emoji_id}">❤️</emoji>'
+
 # ─── Логика игры ───────────────────────────────────────────
 
 class MinesweeperGame:
@@ -75,8 +84,11 @@ class MinesweeperGame:
         if not self.revealed[r][c]:
             return "⬜"
         if self.board[r][c] == -1:
-            return "💣"
-        nums = ["🟦","1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣"]
+            return get_emoji(MINE_EMOJI_ID)  # используем ID мины
+        nums = [
+            get_emoji(SAFE_CELL_EMOJI_ID),  # 0 и открытая ячейка
+            "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣"
+        ]
         return nums[self.board[r][c]]
 
 # ─── Клавиатуры ────────────────────────────────────────────
