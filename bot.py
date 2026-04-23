@@ -31,6 +31,10 @@ WITHDRAW_EMOJI_ID = "5220064167356025824"   # синий
 BONUS_EMOJI_ID = "5449800250032143374"      # зеленый
 SUPPORT_EMOJI_ID = "5413623448440160154"    # красный
 
+def get_emoji(emoji_id: str, fallback: str) -> str:
+    """Форматирует кастомный эмодзи для HTML"""
+    return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
+
 players: dict[int, dict] = {}
 
 def get_player(user_id: int) -> dict:
@@ -110,59 +114,37 @@ class MinesweeperGame:
             return "💣"
         return "✅"
 
-# ─── Клавиатуры (как в примере) ───────────────────────────
+# ─── Клавиатуры ───────────────────────────────────────────
 
 def main_menu():
-    """Клавиатура с кастомными эмодзи и стилями"""
-    markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
-    
-    # Первый ряд - красный (Мины)
-    markup.row(
-        KeyboardButton(
-            text="Мины",
-            style="danger",
-            icon_custom_emoji_id=MINE_EMOJI_ID
-        )
+    """Клавиатура с HTML-тегами для кастомных эмодзи"""
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(
+                text=f'{get_emoji(MINE_EMOJI_ID, "💣")} Мины'
+            )],
+            [
+                KeyboardButton(
+                    text=f'{get_emoji(PROFILE_EMOJI_ID, "👤")} Профиль'
+                ),
+                KeyboardButton(
+                    text=f'{get_emoji(DEPOSIT_EMOJI_ID, "💎")} Пополнить'
+                )
+            ],
+            [
+                KeyboardButton(
+                    text=f'{get_emoji(WITHDRAW_EMOJI_ID, "💸")} Вывести'
+                ),
+                KeyboardButton(
+                    text=f'{get_emoji(BONUS_EMOJI_ID, "🎁")} Бонус'
+                )
+            ],
+            [KeyboardButton(
+                text=f'{get_emoji(SUPPORT_EMOJI_ID, "🛠")} Поддержка'
+            )],
+        ],
+        resize_keyboard=True
     )
-    
-    # Второй ряд - зеленый (Профиль) и синий (Пополнить)
-    markup.row(
-        KeyboardButton(
-            text="Профиль",
-            style="success",
-            icon_custom_emoji_id=PROFILE_EMOJI_ID
-        ),
-        KeyboardButton(
-            text="Пополнить",
-            style="primary",
-            icon_custom_emoji_id=DEPOSIT_EMOJI_ID
-        )
-    )
-    
-    # Третий ряд - синий (Вывести) и зеленый (Бонус)
-    markup.row(
-        KeyboardButton(
-            text="Вывести",
-            style="primary",
-            icon_custom_emoji_id=WITHDRAW_EMOJI_ID
-        ),
-        KeyboardButton(
-            text="Бонус",
-            style="success",
-            icon_custom_emoji_id=BONUS_EMOJI_ID
-        )
-    )
-    
-    # Четвертый ряд - красный (Поддержка)
-    markup.row(
-        KeyboardButton(
-            text="Поддержка",
-            style="danger",
-            icon_custom_emoji_id=SUPPORT_EMOJI_ID
-        )
-    )
-    
-    return markup
 
 def mode_select():
     return InlineKeyboardMarkup(inline_keyboard=[
