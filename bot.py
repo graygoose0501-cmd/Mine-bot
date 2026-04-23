@@ -5,8 +5,8 @@ import datetime
 import pytz
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
-TOKEN = os.environ.get("BOT_TOKEN")
-BOT_USERNAME = "YourBotUsername"  # ← замени на юзернейм бота без @
+TOKEN = os.environ.get("TOKEN")
+BOT_USERNAME = "Minesgameess_bot"  # ← замени на юзернейм бота без @
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -45,21 +45,18 @@ MODES = {
 }
 
 START_BALANCE = 5
+MIN_WITHDRAW = 50
 # ==============================
 
 # ID кастомных эмодзи
-MINE_EMOJI_ID = "5375445874988036618"
-PROFILE_EMOJI_ID = "5280781432824802048"
-DEPOSIT_EMOJI_ID = "5267500801240092311"
-WITHDRAW_EMOJI_ID = "5220064167356025824"
-BONUS_EMOJI_ID = "5449800250032143374"
-SUPPORT_EMOJI_ID = "5413623448440160154"
+EMOJI_MINES = "5375445874988036618"
+EMOJI_PROFILE = "5280781432824802048"
+EMOJI_DEPOSIT = "5267500801240092311"
+EMOJI_WITHDRAW = "5220064167356025824"
+EMOJI_BONUS = "5449800250032143374"
+EMOJI_SUPPORT = "5413623448440160154"
 
-def tg_emoji(emoji_id, fallback):
-    """Создает HTML-тег для кастомного эмодзи (видно ВСЕМ пользователям)"""
-    return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
-
-def get_user(user_id):
+def get_or_create_user(user_id):
     if user_id not in user_data:
         user_data[user_id] = {
             "reg_date": format_date_only(),
@@ -72,8 +69,8 @@ def get_user(user_id):
         }
     return user_data[user_id]
 
-def generate_order_number():
-    return random.randint(10000, 99999)
+def generate_code():
+    return f"#{random.randint(10000, 99999)}"
 
 # ─── Логика игры ───────────────────────────────────────────
 
@@ -139,29 +136,42 @@ class MinesweeperGame:
             return "💣"
         return "✅"
 
-# ===== МЕНЮ (HTML эмодзи через <tg-emoji> - видно ВСЕМ) =====
+# ===== МЕНЮ (как у BlackrStars) =====
 def main_menu():
     markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
     
-    # Первый ряд - Мины
+    # Первый ряд - красный (Мины)
     markup.row(
-        KeyboardButton(f'{tg_emoji(MINE_EMOJI_ID, "💣")} Мины')
+        KeyboardButton("Мины", style="danger", icon_custom_emoji_id=EMOJI_MINES)
     )
-    # Второй ряд - Профиль и Пополнить
+    # Второй ряд - зеленый (Профиль) и синий (Пополнить)
     markup.row(
-        KeyboardButton(f'{tg_emoji(PROFILE_EMOJI_ID, "👤")} Профиль'),
-        KeyboardButton(f'{tg_emoji(DEPOSIT_EMOJI_ID, "💎")} Пополнить')
+        KeyboardButton("Профиль", style="success", icon_custom_emoji_id=EMOJI_PROFILE),
+        KeyboardButton("Пополнить", style="primary", icon_custom_emoji_id=EMOJI_DEPOSIT)
     )
-    # Третий ряд - Вывести и Бонус
+    # Третий ряд - синий (Вывести) и зеленый (Бонус)
     markup.row(
-        KeyboardButton(f'{tg_emoji(WITHDRAW_EMOJI_ID, "💸")} Вывести'),
-        KeyboardButton(f'{tg_emoji(BONUS_EMOJI_ID, "🎁")} Бонус')
+        KeyboardButton("Вывести", style="primary", icon_custom_emoji_id=EMOJI_WITHDRAW),
+        KeyboardButton("Бонус", style="success", icon_custom_emoji_id=EMOJI_BONUS)
     )
-    # Четвертый ряд - Поддержка
+    # Четвертый ряд - красный (Поддержка)
     markup.row(
-        KeyboardButton(f'{tg_emoji(SUPPORT_EMOJI_ID, "📞")} Поддержка')
+        KeyboardButton("Поддержка", style="danger", icon_custom_emoji_id=EMOJI_SUPPORT)
     )
     return markup
+
+MENU_BUTTONS = ["Мины", "Профиль", "Пополнить", "Вывести", "Бонус", "Поддержка"]
+
+def handle_menu(message):
+    t = message.text
+    if t == "Мины": mines_menu(message)
+    elif t == "Профиль": profile(message)
+    elif t == "Пополнить": deposit_menu_handler(message)
+    elif t == "Вывести": withdraw_handler(message)
+    elif t == "Бонус": daily_bonus(message)
+    elif t == "Поддержка": support(message)
+
+# ===== ИГРОВЫЕ КЛАВИАТУРЫ =====
 
 def mode_select():
     markup = InlineKeyboardMarkup()
@@ -237,27 +247,22 @@ def deposit_menu():
 @bot.message_handler(commands=['start'])
 def start(message):
     user_id = message.chat.id
-    ud = get_user(user_id)
+    ud = get_or_create_user(user_id)
     
     bot.send_message(
         user_id,
-        f"🎮 Добро пожаловать в Mines!\n"
+        f"👋 Добро пожаловать в Mines!\n"
         f"💰 Ваш баланс: {ud['balance']} ⭐\n\n"
         f"Выберите действие:",
-        reply_markup=main_menu(),
-        parse_mode="HTML"
+        reply_markup=main_menu()
     )
 
-# ========== ОБРАБОТЧИКИ МЕНЮ ==========
+# ========== ПРОФИЛЬ ==========
 
-@bot.message_handler(func=lambda m: m.text and "Мины" in m.text)
-def mines_menu(message):
-    bot.send_message(message.chat.id, "🎯 Выберите размер поля:", reply_markup=mode_select())
-
-@bot.message_handler(func=lambda m: m.text and "Профиль" in m.text)
+@bot.message_handler(func=lambda m: m.text == "Профиль")
 def profile(message):
     user_id = message.chat.id
-    ud = get_user(user_id)
+    ud = get_or_create_user(user_id)
     user = message.from_user
     
     dep_text = "Нет операций"
@@ -284,62 +289,10 @@ def profile(message):
         parse_mode="Markdown"
     )
 
-@bot.message_handler(func=lambda m: m.text and "Пополнить" in m.text)
-def deposit(message):
-    bot.send_message(message.chat.id, "💎 Выберите сумму пополнения:", reply_markup=deposit_menu())
-
-@bot.message_handler(func=lambda m: m.text and "Вывести" in m.text)
-def withdraw(message):
-    waiting_for_withdraw_amount.add(message.chat.id)
-    bot.send_message(
-        message.chat.id,
-        "💸 Введите сумму для вывода (минимум 50 ⭐):\n"
-        "Для отмены напишите 'отмена'",
-        reply_markup=main_menu(),
-        parse_mode="HTML"
-    )
-
-@bot.message_handler(func=lambda m: m.text and "Бонус" in m.text)
-def daily_bonus(message):
-    user_id = message.chat.id
-    ud = get_user(user_id)
-    now = get_kyiv_time()
-    
-    if ud['last_bonus']:
-        if isinstance(ud['last_bonus'], str):
-            try:
-                ud['last_bonus'] = datetime.datetime.strptime(ud['last_bonus'], "%Y-%m-%d %H:%M:%S%z")
-            except:
-                ud['last_bonus'] = datetime.datetime.strptime(ud['last_bonus'], "%Y-%m-%d %H:%M:%S")
-                ud['last_bonus'] = KYIV_TZ.localize(ud['last_bonus'])
-        
-        time_diff = now - ud['last_bonus']
-        if time_diff < datetime.timedelta(hours=24):
-            remaining = datetime.timedelta(hours=24) - time_diff
-            hours, remainder = divmod(remaining.seconds, 3600)
-            minutes, seconds = divmod(remainder, 60)
-            bot.send_message(
-                user_id,
-                f"🎁 Ежедневный бонус уже получен!\n"
-                f"Приходите через: {hours}ч {minutes}м {seconds}с"
-            )
-            return
-    
-    bonus = random.randint(1, 5)
-    ud['balance'] += bonus
-    ud['last_bonus'] = now.strftime("%Y-%m-%d %H:%M:%S%z")
-    
-    bot.send_message(
-        user_id,
-        f"🎁 Поздравляем! Вы получили {bonus} ⭐!\n"
-        f"💰 Ваш баланс: {ud['balance']} ⭐"
-    )
-
-@bot.message_handler(func=lambda m: m.text and "Поддержка" in m.text)
-def support(message):
-    bot.send_message(message.chat.id, "📞 Поддержка пока не доступна")
-
 # ========== ПОПОЛНЕНИЕ ==========
+
+def deposit_menu_handler(message):
+    bot.send_message(message.chat.id, "💎 Выберите сумму пополнения:", reply_markup=deposit_menu())
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("dep_"))
 def deposit_callback(call):
@@ -353,8 +306,8 @@ def deposit_callback(call):
 
 def process_deposit(message, amount):
     user_id = message.chat.id
-    code = f"#{random.randint(10000, 99999)}"
-    ud = get_user(user_id)
+    code = generate_code()
+    ud = get_or_create_user(user_id)
     ud['balance'] += amount
     ud['transactions'].append({
         'type': 'deposit',
@@ -391,21 +344,30 @@ def custom_deposit(message):
 
 # ========== ВЫВОД ==========
 
+def withdraw_handler(message):
+    waiting_for_withdraw_amount.add(message.chat.id)
+    bot.send_message(
+        message.chat.id,
+        f"💸 Введите сумму для вывода (минимум {MIN_WITHDRAW} ⭐):\n"
+        "Для отмены напишите 'отмена'",
+        reply_markup=main_menu()
+    )
+
 @bot.message_handler(func=lambda m: m.chat.id in waiting_for_withdraw_amount and m.text and m.text.isdigit())
 def withdraw_amount(message):
     amount = int(message.text)
     user_id = message.chat.id
-    ud = get_user(user_id)
+    ud = get_or_create_user(user_id)
     
-    if amount < 50:
-        bot.send_message(user_id, "❌ Минимальная сумма вывода: 50 ⭐")
+    if amount < MIN_WITHDRAW:
+        bot.send_message(user_id, f"❌ Минимальная сумма вывода: {MIN_WITHDRAW} ⭐")
         return
     
     if ud['balance'] < amount:
         bot.send_message(user_id, f"❌ Недостаточно звёзд! Ваш баланс: {ud['balance']} ⭐")
         return
     
-    code = f"#{random.randint(10000, 99999)}"
+    code = generate_code()
     ud['balance'] -= amount
     ud['transactions'].append({
         'type': 'withdraw',
@@ -441,7 +403,54 @@ def cancel_withdraw(message):
     waiting_for_withdraw_amount.discard(message.chat.id)
     bot.send_message(message.chat.id, "❌ Вывод отменён")
 
+# ========== БОНУС ==========
+
+@bot.message_handler(func=lambda m: m.text == "Бонус")
+def daily_bonus(message):
+    user_id = message.chat.id
+    ud = get_or_create_user(user_id)
+    now = get_kyiv_time()
+    
+    if ud['last_bonus']:
+        if isinstance(ud['last_bonus'], str):
+            try:
+                ud['last_bonus'] = datetime.datetime.strptime(ud['last_bonus'], "%Y-%m-%d %H:%M:%S%z")
+            except:
+                ud['last_bonus'] = datetime.datetime.strptime(ud['last_bonus'], "%Y-%m-%d %H:%M:%S")
+                ud['last_bonus'] = KYIV_TZ.localize(ud['last_bonus'])
+        
+        time_diff = now - ud['last_bonus']
+        if time_diff < datetime.timedelta(hours=24):
+            remaining = datetime.timedelta(hours=24) - time_diff
+            hours, remainder = divmod(remaining.seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            bot.send_message(
+                user_id,
+                f"🎁 Ежедневный бонус уже получен!\n"
+                f"Приходите через: {hours}ч {minutes}м {seconds}с"
+            )
+            return
+    
+    bonus = random.randint(1, 5)
+    ud['balance'] += bonus
+    ud['last_bonus'] = now.strftime("%Y-%m-%d %H:%M:%S%z")
+    
+    bot.send_message(
+        user_id,
+        f"🎁 Поздравляем! Вы получили {bonus} ⭐!\n"
+        f"💰 Ваш баланс: {ud['balance']} ⭐"
+    )
+
+# ========== ПОДДЕРЖКА ==========
+
+@bot.message_handler(func=lambda m: m.text == "Поддержка")
+def support(message):
+    bot.send_message(message.chat.id, "📞 Поддержка пока не доступна")
+
 # ========== ИГРА МИНЫ ==========
+
+def mines_menu(message):
+    bot.send_message(message.chat.id, "🎯 Выберите размер поля:", reply_markup=mode_select())
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("mode_"))
 def select_mode(call):
@@ -473,7 +482,7 @@ def start_game(call):
     mines = int(mines)
     user_id = call.message.chat.id
     
-    ud = get_user(user_id)
+    ud = get_or_create_user(user_id)
     
     if ud["balance"] < bet:
         bot.answer_callback_query(call.id, f"❌ Недостаточно звёзд! Ваш баланс: {ud['balance']} ⭐", show_alert=True)
@@ -516,7 +525,7 @@ def cash_out(call):
         return
     
     profit = game._calculate_profit()
-    ud = get_user(user_id)
+    ud = get_or_create_user(user_id)
     ud["balance"] += profit
     game.game_over = True
     
@@ -551,7 +560,7 @@ def on_cell(call):
     
     _, r, c = call.data.split("_")
     profit = game.open_cell(int(r), int(c))
-    ud = get_user(user_id)
+    ud = get_or_create_user(user_id)
     
     if game.win:
         total_win = game.bet * 3
