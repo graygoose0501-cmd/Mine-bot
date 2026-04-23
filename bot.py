@@ -13,19 +13,24 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_IDS = [6227572453, 6794644473]  # ID админов для заявок
+ADMIN_IDS = [6227572453, 6794644473]
 
-# Конфигурация режимов
 MODES = {
     "3x3": {"rows": 3, "cols": 3},
     "5x5": {"rows": 5, "cols": 5},
     "10x10": {"rows": 10, "cols": 10},
 }
 
-# Начальный баланс звёзд
 START_BALANCE = 5
 
-# База данных игроков (в памяти)
+# ID кастомных эмодзи
+MINE_EMOJI_ID = "5375445874988036618"
+PROFILE_EMOJI_ID = "5280781432824802048"
+DEPOSIT_EMOJI_ID = "5267500801240092311"
+WITHDRAW_EMOJI_ID = "5220064167356025824"
+BONUS_EMOJI_ID = "5449800250032143374"
+SUPPORT_EMOJI_ID = "5413623448440160154"
+
 players: dict[int, dict] = {}
 
 def get_player(user_id: int) -> dict:
@@ -36,21 +41,10 @@ def get_player(user_id: int) -> dict:
             "total_games": 0,
             "mines_games": 0,
             "reg_date": datetime.now().strftime("%d.%m.%Y"),
-            "last_bonus": None,  # время последнего бонуса
-            "transactions": [],  # история транзакций
+            "last_bonus": None,
+            "transactions": [],
         }
     return players[user_id]
-
-# ID кастомных эмодзи
-MINE_EMOJI = "5375445874988036618"
-PROFILE_EMOJI = "5280781432824802048"
-DEPOSIT_EMOJI = "5267500801240092311"
-WITHDRAW_EMOJI = "5220064167356025824"
-BONUS_EMOJI = "5449800250032143374"
-SUPPORT_EMOJI = "5413623448440160154"
-
-def get_emoji(emoji_id: str, fallback: str) -> str:
-    return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
 
 # ─── Логика игры ───────────────────────────────────────────
 
@@ -121,12 +115,12 @@ class MinesweeperGame:
 def main_menu():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=f'{get_emoji(MINE_EMOJI, "💣")} Мины')],
-            [KeyboardButton(text=f'{get_emoji(PROFILE_EMOJI, "👤")} Профиль'), 
-             KeyboardButton(text=f'{get_emoji(DEPOSIT_EMOJI, "💎")} Пополнить')],
-            [KeyboardButton(text=f'{get_emoji(WITHDRAW_EMOJI, "💸")} Вывести'), 
-             KeyboardButton(text=f'{get_emoji(BONUS_EMOJI, "🎁")} Бонус')],
-            [KeyboardButton(text=f'{get_emoji(SUPPORT_EMOJI, "📞")} Поддержка')],
+            [KeyboardButton(text="Мины", emoji=MINE_EMOJI_ID)],
+            [KeyboardButton(text="Профиль", emoji=PROFILE_EMOJI_ID),
+             KeyboardButton(text="Пополнить", emoji=DEPOSIT_EMOJI_ID)],
+            [KeyboardButton(text="Вывести", emoji=WITHDRAW_EMOJI_ID),
+             KeyboardButton(text="Бонус", emoji=BONUS_EMOJI_ID)],
+            [KeyboardButton(text="Поддержка", emoji=SUPPORT_EMOJI_ID)],
         ],
         resize_keyboard=True
     )
@@ -209,7 +203,6 @@ temp_mines: dict[int, int] = {}
 waiting_for_custom_deposit: dict[int, bool] = {}
 waiting_for_withdraw: dict[int, bool] = {}
 
-# Генерация кода заявки
 def generate_request_code():
     return f"#{random.randint(10000, 99999)}"
 
@@ -222,12 +215,28 @@ async def cmd_start(msg: Message):
         reply_markup=main_menu()
     )
 
-# ─── Профиль ──────────────────────────────────────────────
+# ─── Обработчики кнопок ───────────────────────────────────
 
-@dp.message(F.text.contains("Профиль"))
+@dp.message(lambda msg: msg.text and "Мины" in msg.text)
+async def mines_menu(msg: Message):
+    await msg.answer("🎯 Выберите размер поля:", reply_markup=mode_select())
+
+@dp.message(lambda msg: msg.text and "Профиль" in msg.text)
 async def profile(msg: Message):
     player = get_player(msg.from_user.id)
     user = msg.from_user
+    
+    # Форматируем транзакции
+    dep_text = "Нет операций"
+    wit_text = "Нет операций"
+    
+    deposits = [t for t in player['transactions'] if t['type'] == 'deposit']
+    if deposits:
+        dep_text = "\n".join([f"{t['date']} | {t['amount']} ⭐ | {t['code']}" for t in deposits[-5:]])
+    
+    withdraws = [t for t in player['transactions'] if t['type'] == 'withdraw']
+    if withdraws:
+        wit_text = "\n".join([f"{t['date']} | {t['amount']} ⭐ | {t['code']}" for t in withdraws[-5:]])
     
     await msg.answer(
         f"👤 <b>Профиль игрока</b>\n\n"
@@ -236,24 +245,53 @@ async def profile(msg: Message):
         f"💰 Баланс: {player['balance']} ⭐\n"
         f"🎮 Всего игр: {player['total_games']}\n"
         f"💣 Игр в мины: {player['mines_games']}\n\n"
-        f"📥 <b>Пополнения:</b>\n{_format_transactions(player, 'deposit')}\n"
-        f"📤 <b>Выводы:</b>\n{_format_transactions(player, 'withdraw')}"
+        f"📥 <b>Пополнения:</b>\n{dep_text}\n\n"
+        f"📤 <b>Выводы:</b>\n{wit_text}"
     )
 
-def _format_transactions(player, trans_type):
-    transactions = [t for t in player['transactions'] if t['type'] == trans_type]
-    if not transactions:
-        return "Нет операций"
-    text = ""
-    for t in transactions[-5:]:  # последние 5
-        text += f"{t['date']} | {t['amount']} ⭐ | {t['code']}\n"
-    return text
-
-# ─── Пополнение ───────────────────────────────────────────
-
-@dp.message(F.text.contains("Пополнить"))
+@dp.message(lambda msg: msg.text and "Пополнить" in msg.text)
 async def deposit(msg: Message):
     await msg.answer("💎 Выберите сумму пополнения:", reply_markup=deposit_menu())
+
+@dp.message(lambda msg: msg.text and "Вывести" in msg.text)
+async def withdraw(msg: Message):
+    waiting_for_withdraw[msg.from_user.id] = True
+    await msg.answer(
+        "💸 Введите сумму для вывода (минимум 50 ⭐):\n"
+        "Для отмены напишите 'отмена'"
+    )
+
+@dp.message(lambda msg: msg.text and "Бонус" in msg.text)
+async def daily_bonus(msg: Message):
+    player = get_player(msg.from_user.id)
+    now = datetime.now()
+    
+    if player['last_bonus']:
+        time_diff = now - player['last_bonus']
+        if time_diff < timedelta(hours=24):
+            remaining = timedelta(hours=24) - time_diff
+            hours, remainder = divmod(remaining.seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            await msg.answer(
+                f"🎁 Ежедневный бонус уже получен!\n"
+                f"Приходите через: {hours}ч {minutes}м {seconds}с"
+            )
+            return
+    
+    bonus = random.randint(1, 5)
+    player['balance'] += bonus
+    player['last_bonus'] = now
+    
+    await msg.answer(
+        f"🎁 Поздравляем! Вы получили {bonus} ⭐!\n"
+        f"💰 Ваш баланс: {player['balance']} ⭐"
+    )
+
+@dp.message(lambda msg: msg.text and "Поддержка" in msg.text)
+async def support(msg: Message):
+    await msg.answer("📞 Поддержка пока не доступна")
+
+# ─── Пополнение ───────────────────────────────────────────
 
 @dp.callback_query(F.data.startswith("dep_"))
 async def deposit_amount(call: CallbackQuery):
@@ -276,7 +314,6 @@ async def process_deposit(call, amount):
         'code': code
     })
     
-    # Уведомление админам
     for admin_id in ADMIN_IDS:
         try:
             await bot.send_message(
@@ -293,7 +330,7 @@ async def process_deposit(call, amount):
     await call.message.edit_text(f"✅ Пополнение на {amount} ⭐ успешно!\nКод: {code}")
     waiting_for_custom_deposit.pop(call.from_user.id, None)
 
-@dp.message(F.text.regexp(r'^\d+$'), lambda msg: waiting_for_custom_deposit.get(msg.from_user.id))
+@dp.message(lambda msg: waiting_for_custom_deposit.get(msg.from_user.id) and msg.text.isdigit())
 async def custom_deposit(msg: Message):
     amount = int(msg.text)
     if amount < 1:
@@ -328,15 +365,7 @@ async def custom_deposit(msg: Message):
 
 # ─── Вывод ────────────────────────────────────────────────
 
-@dp.message(F.text.contains("Вывести"))
-async def withdraw(msg: Message):
-    waiting_for_withdraw[msg.from_user.id] = True
-    await msg.answer(
-        "💸 Введите сумму для вывода (минимум 50 ⭐):\n"
-        "Для отмены напишите 'отмена'"
-    )
-
-@dp.message(F.text.regexp(r'^\d+$'), lambda msg: waiting_for_withdraw.get(msg.from_user.id))
+@dp.message(lambda msg: waiting_for_withdraw.get(msg.from_user.id) and msg.text.isdigit())
 async def withdraw_amount(msg: Message):
     amount = int(msg.text)
     player = get_player(msg.from_user.id)
@@ -378,50 +407,12 @@ async def withdraw_amount(msg: Message):
     )
     waiting_for_withdraw.pop(msg.from_user.id, None)
 
-@dp.message(F.text.lower() == 'отмена', lambda msg: waiting_for_withdraw.get(msg.from_user.id))
+@dp.message(lambda msg: waiting_for_withdraw.get(msg.from_user.id) and msg.text.lower() == 'отмена')
 async def cancel_withdraw(msg: Message):
     waiting_for_withdraw.pop(msg.from_user.id, None)
     await msg.answer("❌ Вывод отменён")
 
-# ─── Ежедневный бонус ─────────────────────────────────────
-
-@dp.message(F.text.contains("Бонус"))
-async def daily_bonus(msg: Message):
-    player = get_player(msg.from_user.id)
-    now = datetime.now()
-    
-    if player['last_bonus']:
-        time_diff = now - player['last_bonus']
-        if time_diff < timedelta(hours=24):
-            remaining = timedelta(hours=24) - time_diff
-            hours, remainder = divmod(remaining.seconds, 3600)
-            minutes, seconds = divmod(remainder, 60)
-            await msg.answer(
-                f"🎁 Ежедневный бонус уже получен!\n"
-                f"Приходите через: {hours}ч {minutes}м {seconds}с"
-            )
-            return
-    
-    bonus = random.randint(1, 5)
-    player['balance'] += bonus
-    player['last_bonus'] = now
-    
-    await msg.answer(
-        f"🎁 Поздравляем! Вы получили {bonus} ⭐!\n"
-        f"💰 Ваш баланс: {player['balance']} ⭐"
-    )
-
-# ─── Поддержка ────────────────────────────────────────────
-
-@dp.message(F.text.contains("Поддержка"))
-async def support(msg: Message):
-    await msg.answer("📞 Поддержка пока не доступна")
-
-# ─── Игра Мины ────────────────────────────────────────────
-
-@dp.message(F.text.contains("Мины"))
-async def minesweeper_menu(msg: Message):
-    await msg.answer("🎯 Выберите размер поля:", reply_markup=mode_select())
+# ─── Игра ──────────────────────────────────────────────────
 
 @dp.callback_query(F.data.startswith("mode_"))
 async def select_mode(call: CallbackQuery):
