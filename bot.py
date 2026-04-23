@@ -47,7 +47,7 @@ MODES = {
 START_BALANCE = 5
 # ==============================
 
-# ID кастомных эмодзи
+# ID кастомных эмодзи (как в примере)
 MINE_EMOJI_ID = "5375445874988036618"
 PROFILE_EMOJI_ID = "5280781432824802048"
 DEPOSIT_EMOJI_ID = "5267500801240092311"
@@ -135,27 +135,27 @@ class MinesweeperGame:
             return "💣"
         return "✅"
 
-# ===== МЕНЮ =====
+# ===== МЕНЮ (ТОЛЬКО текст + icon_custom_emoji_id, без style) =====
 def main_menu():
     markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
     
-    # Первый ряд - красный (Мины)
+    # Первый ряд - Мины
     markup.row(
-        KeyboardButton("Мины", style="danger", icon_custom_emoji_id=MINE_EMOJI_ID)
+        KeyboardButton("Мины", icon_custom_emoji_id=MINE_EMOJI_ID)
     )
-    # Второй ряд - зеленый (Профиль) и синий (Пополнить)
+    # Второй ряд - Профиль и Пополнить
     markup.row(
-        KeyboardButton("Профиль", style="success", icon_custom_emoji_id=PROFILE_EMOJI_ID),
-        KeyboardButton("Пополнить", style="primary", icon_custom_emoji_id=DEPOSIT_EMOJI_ID)
+        KeyboardButton("Профиль", icon_custom_emoji_id=PROFILE_EMOJI_ID),
+        KeyboardButton("Пополнить", icon_custom_emoji_id=DEPOSIT_EMOJI_ID)
     )
-    # Третий ряд - синий (Вывести) и зеленый (Бонус)
+    # Третий ряд - Вывести и Бонус
     markup.row(
-        KeyboardButton("Вывести", style="primary", icon_custom_emoji_id=WITHDRAW_EMOJI_ID),
-        KeyboardButton("Бонус", style="success", icon_custom_emoji_id=BONUS_EMOJI_ID)
+        KeyboardButton("Вывести", icon_custom_emoji_id=WITHDRAW_EMOJI_ID),
+        KeyboardButton("Бонус", icon_custom_emoji_id=BONUS_EMOJI_ID)
     )
-    # Четвертый ряд - красный (Поддержка)
+    # Четвертый ряд - Поддержка
     markup.row(
-        KeyboardButton("Поддержка", style="danger", icon_custom_emoji_id=SUPPORT_EMOJI_ID)
+        KeyboardButton("Поддержка", icon_custom_emoji_id=SUPPORT_EMOJI_ID)
     )
     return markup
 
@@ -580,4 +580,5 @@ def on_cell(call):
 
 if __name__ == "__main__":
     print("✅ Бот запущен!")
+    bot.remove_webhook()
     bot.infinity_polling()
