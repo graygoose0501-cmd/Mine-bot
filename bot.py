@@ -8,6 +8,8 @@ from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton,
 )
 from aiogram.filters import CommandStart
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
@@ -18,13 +20,8 @@ MODES = {
 }
 
 # ID эмодзи
-SAFE_CELL_EMOJI_ID = "5206607081334906820"  # эмодзи для правильной ячейки
+SAFE_CELL_EMOJI_ID = "5206607081334906820"  # эмодзи для безопасной ячейки
 MINE_EMOJI_ID = "5375445874988036618"       # эмодзи для мины
-
-def get_emoji(emoji_id: str) -> str:
-    """Возвращает строку с custom emoji по ID для использования в тексте кнопки."""
-    # Для Premium эмодзи в тексте кнопки используем формат <emoji id="...">
-    return f'<emoji id="{emoji_id}">❤️</emoji>'
 
 # ─── Логика игры ───────────────────────────────────────────
 
@@ -84,12 +81,10 @@ class MinesweeperGame:
         if not self.revealed[r][c]:
             return "⬜"
         if self.board[r][c] == -1:
-            return get_emoji(MINE_EMOJI_ID)  # используем ID мины
-        nums = [
-            get_emoji(SAFE_CELL_EMOJI_ID),  # 0 и открытая ячейка
-            "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣"
-        ]
-        return nums[self.board[r][c]]
+            # Мина - используем ID эмодзи мины
+            return f'<tg-emoji emoji-id="{MINE_EMOJI_ID}">💣</tg-emoji>'
+        # Безопасная ячейка - используем ID эмодзи безопасной ячейки
+        return f'<tg-emoji emoji-id="{SAFE_CELL_EMOJI_ID}">✅</tg-emoji>'
 
 # ─── Клавиатуры ────────────────────────────────────────────
 
@@ -121,7 +116,10 @@ def game_board(game: MinesweeperGame):
 
 # ─── Бот ───────────────────────────────────────────────────
 
-bot = Bot(token=BOT_TOKEN)
+bot = Bot(
+    token=BOT_TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+)
 dp = Dispatcher()
 games: dict[int, MinesweeperGame] = {}
 
@@ -137,7 +135,10 @@ async def minesweeper_menu(msg: Message):
 async def start_game(call: CallbackQuery):
     cfg = MODES[call.data[5:]]
     games[call.from_user.id] = MinesweeperGame(**cfg)
-    await call.message.edit_text("Нажимай на клетки! ⬜", reply_markup=game_board(games[call.from_user.id]))
+    await call.message.edit_text(
+        "Нажимай на клетки! ⬜",
+        reply_markup=game_board(games[call.from_user.id])
+    )
 
 @dp.callback_query(F.data == "new_game")
 async def new_game(call: CallbackQuery):
