@@ -47,13 +47,17 @@ MODES = {
 START_BALANCE = 5
 # ==============================
 
-# ID кастомных эмодзи (как в примере)
+# ID кастомных эмодзи
 MINE_EMOJI_ID = "5375445874988036618"
 PROFILE_EMOJI_ID = "5280781432824802048"
 DEPOSIT_EMOJI_ID = "5267500801240092311"
 WITHDRAW_EMOJI_ID = "5220064167356025824"
 BONUS_EMOJI_ID = "5449800250032143374"
 SUPPORT_EMOJI_ID = "5413623448440160154"
+
+def tg_emoji(emoji_id, fallback):
+    """Создает HTML-тег для кастомного эмодзи (видно ВСЕМ пользователям)"""
+    return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
 
 def get_user(user_id):
     if user_id not in user_data:
@@ -135,27 +139,27 @@ class MinesweeperGame:
             return "💣"
         return "✅"
 
-# ===== МЕНЮ (ТОЛЬКО текст + icon_custom_emoji_id, без style) =====
+# ===== МЕНЮ (HTML эмодзи через <tg-emoji> - видно ВСЕМ) =====
 def main_menu():
     markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
     
     # Первый ряд - Мины
     markup.row(
-        KeyboardButton("Мины", icon_custom_emoji_id=MINE_EMOJI_ID)
+        KeyboardButton(f'{tg_emoji(MINE_EMOJI_ID, "💣")} Мины')
     )
     # Второй ряд - Профиль и Пополнить
     markup.row(
-        KeyboardButton("Профиль", icon_custom_emoji_id=PROFILE_EMOJI_ID),
-        KeyboardButton("Пополнить", icon_custom_emoji_id=DEPOSIT_EMOJI_ID)
+        KeyboardButton(f'{tg_emoji(PROFILE_EMOJI_ID, "👤")} Профиль'),
+        KeyboardButton(f'{tg_emoji(DEPOSIT_EMOJI_ID, "💎")} Пополнить')
     )
     # Третий ряд - Вывести и Бонус
     markup.row(
-        KeyboardButton("Вывести", icon_custom_emoji_id=WITHDRAW_EMOJI_ID),
-        KeyboardButton("Бонус", icon_custom_emoji_id=BONUS_EMOJI_ID)
+        KeyboardButton(f'{tg_emoji(WITHDRAW_EMOJI_ID, "💸")} Вывести'),
+        KeyboardButton(f'{tg_emoji(BONUS_EMOJI_ID, "🎁")} Бонус')
     )
     # Четвертый ряд - Поддержка
     markup.row(
-        KeyboardButton("Поддержка", icon_custom_emoji_id=SUPPORT_EMOJI_ID)
+        KeyboardButton(f'{tg_emoji(SUPPORT_EMOJI_ID, "📞")} Поддержка')
     )
     return markup
 
@@ -240,16 +244,17 @@ def start(message):
         f"🎮 Добро пожаловать в Mines!\n"
         f"💰 Ваш баланс: {ud['balance']} ⭐\n\n"
         f"Выберите действие:",
-        reply_markup=main_menu()
+        reply_markup=main_menu(),
+        parse_mode="HTML"
     )
 
 # ========== ОБРАБОТЧИКИ МЕНЮ ==========
 
-@bot.message_handler(func=lambda m: m.text == "Мины")
+@bot.message_handler(func=lambda m: m.text and "Мины" in m.text)
 def mines_menu(message):
     bot.send_message(message.chat.id, "🎯 Выберите размер поля:", reply_markup=mode_select())
 
-@bot.message_handler(func=lambda m: m.text == "Профиль")
+@bot.message_handler(func=lambda m: m.text and "Профиль" in m.text)
 def profile(message):
     user_id = message.chat.id
     ud = get_user(user_id)
@@ -279,21 +284,22 @@ def profile(message):
         parse_mode="Markdown"
     )
 
-@bot.message_handler(func=lambda m: m.text == "Пополнить")
+@bot.message_handler(func=lambda m: m.text and "Пополнить" in m.text)
 def deposit(message):
     bot.send_message(message.chat.id, "💎 Выберите сумму пополнения:", reply_markup=deposit_menu())
 
-@bot.message_handler(func=lambda m: m.text == "Вывести")
+@bot.message_handler(func=lambda m: m.text and "Вывести" in m.text)
 def withdraw(message):
     waiting_for_withdraw_amount.add(message.chat.id)
     bot.send_message(
         message.chat.id,
         "💸 Введите сумму для вывода (минимум 50 ⭐):\n"
         "Для отмены напишите 'отмена'",
-        reply_markup=main_menu()
+        reply_markup=main_menu(),
+        parse_mode="HTML"
     )
 
-@bot.message_handler(func=lambda m: m.text == "Бонус")
+@bot.message_handler(func=lambda m: m.text and "Бонус" in m.text)
 def daily_bonus(message):
     user_id = message.chat.id
     ud = get_user(user_id)
@@ -329,7 +335,7 @@ def daily_bonus(message):
         f"💰 Ваш баланс: {ud['balance']} ⭐"
     )
 
-@bot.message_handler(func=lambda m: m.text == "Поддержка")
+@bot.message_handler(func=lambda m: m.text and "Поддержка" in m.text)
 def support(message):
     bot.send_message(message.chat.id, "📞 Поддержка пока не доступна")
 
