@@ -105,7 +105,7 @@ class MinesweeperGame:
 
     def cell_symbol(self, r, c):
         if not self.revealed[r][c]:
-            return "⬜"
+            return "⬜️"
         if self.board[r][c] == -1:
             return "💣"
         return "✅"
@@ -113,14 +113,19 @@ class MinesweeperGame:
 # ─── Клавиатуры ────────────────────────────────────────────
 
 def main_menu():
+    # Используем HTML-тег <tg-emoji> для кастомных эмодзи
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="Мины", emoji=MINE_EMOJI_ID)],
-            [KeyboardButton(text="Профиль", emoji=PROFILE_EMOJI_ID),
-             KeyboardButton(text="Пополнить", emoji=DEPOSIT_EMOJI_ID)],
-            [KeyboardButton(text="Вывести", emoji=WITHDRAW_EMOJI_ID),
-             KeyboardButton(text="Бонус", emoji=BONUS_EMOJI_ID)],
-            [KeyboardButton(text="Поддержка", emoji=SUPPORT_EMOJI_ID)],
+            [KeyboardButton(text=f'<tg-emoji emoji-id="{MINE_EMOJI_ID}">💣</tg-emoji> Мины')],
+            [
+                KeyboardButton(text=f'<tg-emoji emoji-id="{PROFILE_EMOJI_ID}">👤</tg-emoji> Профиль'),
+                KeyboardButton(text=f'<tg-emoji emoji-id="{DEPOSIT_EMOJI_ID}">💎</tg-emoji> Пополнить')
+            ],
+            [
+                KeyboardButton(text=f'<tg-emoji emoji-id="{WITHDRAW_EMOJI_ID}">💸</tg-emoji> Вывести'),
+                KeyboardButton(text=f'<tg-emoji emoji-id="{BONUS_EMOJI_ID}">🎁</tg-emoji> Бонус')
+            ],
+            [KeyboardButton(text=f'<tg-emoji emoji-id="{SUPPORT_EMOJI_ID}">🛠</tg-emoji> Поддержка')],
         ],
         resize_keyboard=True
     )
@@ -226,7 +231,6 @@ async def profile(msg: Message):
     player = get_player(msg.from_user.id)
     user = msg.from_user
     
-    # Форматируем транзакции
     dep_text = "Нет операций"
     wit_text = "Нет операций"
     
@@ -330,7 +334,7 @@ async def process_deposit(call, amount):
     await call.message.edit_text(f"✅ Пополнение на {amount} ⭐ успешно!\nКод: {code}")
     waiting_for_custom_deposit.pop(call.from_user.id, None)
 
-@dp.message(lambda msg: waiting_for_custom_deposit.get(msg.from_user.id) and msg.text.isdigit())
+@dp.message(lambda msg: waiting_for_custom_deposit.get(msg.from_user.id) and msg.text and msg.text.isdigit())
 async def custom_deposit(msg: Message):
     amount = int(msg.text)
     if amount < 1:
@@ -365,7 +369,7 @@ async def custom_deposit(msg: Message):
 
 # ─── Вывод ────────────────────────────────────────────────
 
-@dp.message(lambda msg: waiting_for_withdraw.get(msg.from_user.id) and msg.text.isdigit())
+@dp.message(lambda msg: waiting_for_withdraw.get(msg.from_user.id) and msg.text and msg.text.isdigit())
 async def withdraw_amount(msg: Message):
     amount = int(msg.text)
     player = get_player(msg.from_user.id)
@@ -407,7 +411,7 @@ async def withdraw_amount(msg: Message):
     )
     waiting_for_withdraw.pop(msg.from_user.id, None)
 
-@dp.message(lambda msg: waiting_for_withdraw.get(msg.from_user.id) and msg.text.lower() == 'отмена')
+@dp.message(lambda msg: waiting_for_withdraw.get(msg.from_user.id) and msg.text and msg.text.lower() == 'отмена')
 async def cancel_withdraw(msg: Message):
     waiting_for_withdraw.pop(msg.from_user.id, None)
     await msg.answer("❌ Вывод отменён")
