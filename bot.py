@@ -8,8 +8,6 @@ from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton,
 )
 from aiogram.filters import CommandStart
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
@@ -18,10 +16,6 @@ MODES = {
     "5x5":   {"rows": 5,  "cols": 5,  "mines": 5},
     "10x10": {"rows": 10, "cols": 10, "mines": 15},
 }
-
-# ID эмодзи
-SAFE_CELL_EMOJI_ID = "5206607081334906820"  # эмодзи для безопасной ячейки
-MINE_EMOJI_ID = "5375445874988036618"       # эмодзи для мины
 
 # ─── Логика игры ───────────────────────────────────────────
 
@@ -81,10 +75,8 @@ class MinesweeperGame:
         if not self.revealed[r][c]:
             return "⬜"
         if self.board[r][c] == -1:
-            # Мина - используем ID эмодзи мины
-            return f'<tg-emoji emoji-id="{MINE_EMOJI_ID}">💣</tg-emoji>'
-        # Безопасная ячейка - используем ID эмодзи безопасной ячейки
-        return f'<tg-emoji emoji-id="{SAFE_CELL_EMOJI_ID}">✅</tg-emoji>'
+            return "💣"  # мина
+        return "✅"  # безопасная открытая ячейка
 
 # ─── Клавиатуры ────────────────────────────────────────────
 
@@ -116,10 +108,7 @@ def game_board(game: MinesweeperGame):
 
 # ─── Бот ───────────────────────────────────────────────────
 
-bot = Bot(
-    token=BOT_TOKEN,
-    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
-)
+bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 games: dict[int, MinesweeperGame] = {}
 
@@ -135,10 +124,7 @@ async def minesweeper_menu(msg: Message):
 async def start_game(call: CallbackQuery):
     cfg = MODES[call.data[5:]]
     games[call.from_user.id] = MinesweeperGame(**cfg)
-    await call.message.edit_text(
-        "Нажимай на клетки! ⬜",
-        reply_markup=game_board(games[call.from_user.id])
-    )
+    await call.message.edit_text("Нажимай на клетки! ⬜", reply_markup=game_board(games[call.from_user.id]))
 
 @dp.callback_query(F.data == "new_game")
 async def new_game(call: CallbackQuery):
